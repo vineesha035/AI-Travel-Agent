@@ -19,7 +19,7 @@ def _resolve_destination(query: str):
     Step 1: turn a place name into the dest_id + search_type that
     the real hotel search endpoint requires. Returns (dest_id, search_type, error).
     """
-    response = requests.get(f"{BASE_URL}/searchDestination", headers=HEADERS, params={"query": query})
+    response = requests.get(f"{BASE_URL}/searchDestination", headers=HEADERS, params={"query": query}, timeout=15)
     if response.status_code != 200:
         return None, None, f"Failed to resolve destination: {response.status_code} - {response.text}"
 
@@ -54,7 +54,7 @@ def hotels_finder(city: str, checkin_date: str, checkout_date: str, adults: int 
         "languagecode": languagecode,
     }
 
-    response = requests.get(f"{BASE_URL}/searchHotels", headers=HEADERS, params=params)
+    response = requests.get(f"{BASE_URL}/searchHotels", headers=HEADERS, params=params, timeout=15)
     if response.status_code != 200:
         return {"error": f"Failed to fetch hotels: {response.status_code} - {response.text}"}
 

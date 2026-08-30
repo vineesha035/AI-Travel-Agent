@@ -35,7 +35,7 @@ def flights_finder(origin: str, destination: str, date: str, return_date: str = 
     else:
         endpoint = f"{BASE_URL}/search"
 
-    response = requests.get(endpoint, headers=HEADERS, params=params)
+    response = requests.get(endpoint, headers=HEADERS, params=params, timeout=15)
 
     if response.status_code != 200:
         return {"error": f"Failed to fetch flights: {response.status_code} - {response.text}"}

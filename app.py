@@ -6,6 +6,7 @@ from langchain_core.messages import HumanMessage
 
 from agents.agent import Agent
 from agents.utils import extract_text
+from langgraph.types import Command
 
 load_dotenv()
 
@@ -40,11 +41,48 @@ def process_query(user_input):
             config=config,
         )
 
-    final_text = extract_text(result["messages"][-1].content)
-    st.session_state.travel_info = final_text
-
+    if "__interrupt__" in result:
+        st.session_state.pending_itinerary = result["__interrupt__"][0].value["itinerary"]
+        st.session_state.awaiting_email_decision = True
+    else:
+        st.session_state.pending_itinerary = extract_text(result["messages"][-1].content)
+        st.session_state.awaiting_email_decision = False
+def render_email_decision():
     st.subheader("Your Travel Plan")
-    st.markdown(final_text)
+    st.markdown(st.session_state.pending_itinerary)
+
+    if not st.session_state.get("awaiting_email_decision"):
+        return
+
+    config = {"configurable": {"thread_id": st.session_state.thread_id}}
+    send_email_option = st.radio("Do you want to send this itinerary via email?", ("No", "Yes"))
+
+    if send_email_option == "No":
+        if st.button("Confirm"):
+            st.session_state.agent.graph.invoke(Command(resume={"send_email": False}), config=config)
+            st.session_state.awaiting_email_decision = False
+            st.rerun()
+    else:
+        with st.form(key="email_form"):
+            sender_email = st.text_input("Sender Email")
+            receiver_email = st.text_input("Receiver Email")
+            subject = st.text_input("Email Subject", "Your Travel Itinerary")
+            submitted = st.form_submit_button("Send Email")
+
+        if submitted:
+            if sender_email and receiver_email and subject:
+                resume_value = {
+                    "send_email": True,
+                    "sender_email": sender_email,
+                    "receiver_email": receiver_email,
+                    "subject": subject,
+                }
+                with st.spinner("Sending email..."):
+                    final_result = st.session_state.agent.graph.invoke(Command(resume=resume_value), config=config)
+                st.success(extract_text(final_result["messages"][-1].content))
+                st.session_state.awaiting_email_decision = False
+            else:
+                st.error("Please fill out all email fields.")
 
 
 def main():
@@ -53,6 +91,9 @@ def main():
 
     if st.button("Get Travel Information"):
         process_query(user_input)
+
+    if "pending_itinerary" in st.session_state:
+        render_email_decision()
 
 
 if __name__ == "__main__":

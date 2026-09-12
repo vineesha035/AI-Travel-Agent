@@ -1,0 +1,56 @@
+# AI Travel Agent — Build Progress & Reference
+
+Rebuilt from scratch (not the original uploaded scaffold). Stack: Python 3.13, conda env `travel-agent`, LangGraph + LangChain, Google Gemini (free tier), RapidAPI (Skyscanner Flights + Booking COM), SendGrid, Streamlit.
+
+## Done
+
+**Stage 1 — API keys.** `.env` (git-ignored) holds `GOOGLE_API_KEY` (aistudio.google.com, free), `RAPIDAPI_KEY` (one key, subscribed to two separate APIs: "Skyscanner Flights" by Crawlio and "Booking COM" by DataCrawler), `SENDGRID_API_KEY` (Single Sender Verification used, no domain needed).
+
+**Stage 2 — Environment.** Conda env `travel-agent` (Python 3.13), isolated from `base`. `requirements.txt` built incrementally, one package per stage as needed, not all upfront.
+
+**Stage 3 — `agents/tools/flights_finder.py`.** Calls Skyscanner Flights API (host `skyscanner-flights4.p.rapidapi.com`). Round-trip endpoint (`/api/v1/roundtrip`) if `return_date` given, else one-way (`/api/v1/search`). `requests.get(..., timeout=15)` — always set timeouts, default is to hang forever.
+
+**Stage 4 — `agents/tools/hotel_finder.py`.** Booking COM API (host `booking-com15.p.rapidapi.com`). Two-step: `_resolve_destination()` calls `searchDestination` to turn a city name into `dest_id`/`search_type`, then `hotels_finder()` calls `searchHotels` with those. Real APIs often need a lookup step before the "real" call — don't assume a free-text field will just work.
+
+**Stage 5 — `agents/tools/itinerary_planner.py`.** First direct LLM call, via `ChatGoogleGenerativeAI`. Model pinned to `gemini-flash-lite-latest` (least contended free-tier model; avoid the newest release for reliability). Key lesson: newer Gemini versions return `response.content` as a list of content blocks, not a plain string — normalized via a shared helper.
+
+**Stage 6 — `agents/agent.py`.** The LangGraph orchestrator.
+- `AgentState` — `TypedDict` with `messages: Annotated[list[AnyMessage], operator.add]`. The `operator.add` reducer makes node updates *append* to message history instead of replacing it — without it, every node run wipes prior conversation.
+- Loop: `call_tools_llm` (ask the LLM) → `exists_action` (checks if the LLM's last message has `tool_calls`) → if yes, `invoke_tools` (actually run the Python function) → back to `call_tools_llm`. Loops until the LLM responds with no tool call.
+- `MemorySaver()` checkpointer, keyed by `thread_id`, enables pause/resume (needed for Stage 8).
+- `agents/utils.py` — shared `extract_text()` helper (handles the list-of-blocks response shape), used by `itinerary_planner.py`, `agent.py`, and `app.py`.
+
+**Stage 7 — `app.py`.** Streamlit UI. Key concept: Streamlit reruns the *entire script* on every interaction, so anything that must survive a rerun (the `Agent` instance, `thread_id`) lives in `st.session_state`, guarded by `if "x" not in st.session_state`. Verified working end-to-end through the actual browser: real flights, real hotel, full itinerary.
+
+**Stage 8 — SendGrid email + LangGraph interrupt (in progress).**
+- `agents/tools/email_sender.py` — plain function using `SendGridAPIClient`/`Mail` to send the itinerary as HTML email. Not LLM-callable; we decide when to call it, not the model.
+- `agent.py` updated: new node `request_email_decision` runs after the LLM is done calling tools (instead of going straight to `END`). It calls `interrupt({"itinerary": itinerary_text})`, which pauses the entire graph and hands that payload back to the caller. Resuming later with `graph.invoke(Command(resume={...}), config=...)` (same `thread_id`) continues execution from that exact point — either sends the email or skips it, then reaches `END`.
+- Confirmed working standalone: `python -m agents.agent` pauses correctly, prints the itinerary from the interrupt payload, resumes with `Command(resume=...)`, and reaches `END`.
+- `app.py` updated: `process_query` detects `"__interrupt__"` and stores the itinerary + pause state in `st.session_state`; `render_email_decision` shows the radio + form and resumes the graph via `Command(resume=...)` on the same `thread_id`.
+- **Verified fully working end-to-end through the browser**: decline path resumes silently, send path actually delivers a real email via SendGrid (landed in spam initially — expected/normal for a fresh sender without full domain authentication, not a bug).
+- Known cosmetic bug to fix in Stage 9: `render_email_decision` shows `st.success()` (green box) even when the email actually fails to send — should branch on whether the note says "sent" vs "failed."
+
+## Not started yet
+
+- **Finish Stage 8:** once `agent.py`'s interrupt/resume works standalone, update `app.py` to: detect `"__interrupt__" in result`, show the itinerary from the interrupt payload, render the email opt-in form, and on submit call `graph.invoke(Command(resume=...), config=...)` with the *same* `thread_id` stored in `st.session_state`.
+- **Stage 9 — Error handling.** Wrap LLM/API calls with retry logic (justified by the repeated transient 503s and one connection-reset error hit this session). Handle missing/invalid keys gracefully instead of raw tracebacks.
+- **Stage 10 — Tests.** `pytest`, mocked API responses for the three tool files.
+- **Stage 11 — README.** Real setup instructions, architecture diagram/explanation, design-decision notes (interview talking points: why RapidAPI, why Gemini over OpenAI, why LangGraph over a plain loop, the response-shape normalization lesson, why timeouts matter).
+- **Stage 12 — Run end-to-end, optional deploy** to Streamlit Community Cloud.
+
+## Common bugs hit this session (so you recognize them fast)
+
+- **Indentation mismatches** — by far the most frequent issue. A `def` block, an `if __name__ == "__main__":` block, or a decorator ending up nested one level too deep (inside a class or another function) instead of at the intended level. Symptoms vary: `SyntaxError`, `NameError` (referencing a class before it's fully defined), or a function silently placed after a `return` (dead code, never runs, no error at all).
+- **Manual refactors dropping/renaming variables** — e.g. `timeout=15` added by copying a pattern from a different file, introducing a reference to a variable (`endpoint`, `params`) that doesn't exist in that function's scope.
+- **Gemini model deprecation/overload** — `gemini-2.5-flash` returned `404` (deprecated for new users); newest releases (`gemini-3.7-flash`) returned frequent `503` (overloaded). Settled on `gemini-flash-lite-latest` for reliability.
+- **No timeout on `requests.get()`** — caused a silent hang with no error. Fixed by adding `timeout=15` everywhere.
+- **Running a file two different ways changes its imports** — `python agents/agent.py` fails on internal package imports (`agents.tools...`); `python -m agents.agent` from the project root works, because `-m` adds the project root to the import path.
+
+## Key running commands
+
+```
+conda activate travel-agent
+python -m agents.agent          # test the graph directly
+streamlit run app.py            # run the UI
+git add . && git status && git commit -m "..." && git push   # always check git status before AND after `add` — confirm .env never appears
+```

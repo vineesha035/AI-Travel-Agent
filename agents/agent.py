@@ -1,16 +1,19 @@
 import os
 import operator
 from typing import Annotated, TypedDict
-from agents.utils import extract_text
+
 from dotenv import load_dotenv
-from langchain_core.messages import AnyMessage, HumanMessage, SystemMessage, ToolMessage 
+from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, SystemMessage, ToolMessage
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, StateGraph
+from langgraph.types import Command, interrupt
 
+from agents.tools.email_sender import send_email
 from agents.tools.flights_finder import flights_finder
 from agents.tools.hotel_finder import hotels_finder
 from agents.tools.itinerary_planner import itinerary_planner
+from agents.utils import extract_text
 
 load_dotenv()
 
@@ -29,6 +32,8 @@ You can:
 - Use itinerary_planner to generate a daily itinerary
 Always combine tool outputs into a clear, well-organized trip summary for the user.
 """
+
+
 class Agent:
     def __init__(self):
         self._tools = {t.__name__: t for t in TOOLS}
@@ -40,14 +45,16 @@ class Agent:
         builder = StateGraph(AgentState)
         builder.add_node("call_tools_llm", self.call_tools_llm)
         builder.add_node("invoke_tools", self.invoke_tools)
+        builder.add_node("request_email_decision", self.request_email_decision)
         builder.set_entry_point("call_tools_llm")
 
         builder.add_conditional_edges(
             "call_tools_llm",
             Agent.exists_action,
-            {"more_tools": "invoke_tools", "done": END},
+            {"more_tools": "invoke_tools", "done": "request_email_decision"},
         )
         builder.add_edge("invoke_tools", "call_tools_llm")
+        builder.add_edge("request_email_decision", END)
 
         memory = MemorySaver()
         self.graph = builder.compile(checkpointer=memory)
@@ -74,8 +81,28 @@ class Agent:
                 result = self._tools[t["name"]](**t["args"])
             results.append(ToolMessage(tool_call_id=t["id"], name=t["name"], content=str(result)))
         return {"messages": results}
+
+    def request_email_decision(self, state: AgentState):
+        final_message = state["messages"][-1]
+        itinerary_text = extract_text(final_message.content)
+
+        decision = interrupt({"itinerary": itinerary_text})
+
+        if decision and decision.get("send_email"):
+            result = send_email(
+                sender_email=decision["sender_email"],
+                receiver_email=decision["receiver_email"],
+                subject=decision.get("subject", "Your Travel Itinerary"),
+                content=itinerary_text,
+            )
+            note = "Email sent successfully." if result.get("success") else f"Email failed to send: {result.get('error')}"
+        else:
+            note = "Email not sent."
+
+        return {"messages": [AIMessage(content=note)]}
+
+
 if __name__ == "__main__":
-    print("Starting agent run...")
     agent = Agent()
     config = {"configurable": {"thread_id": "test-thread-1"}}
     user_query = (
@@ -83,5 +110,12 @@ if __name__ == "__main__":
         "I'm interested in museums, fine dining, and nightlife."
     )
     result = agent.graph.invoke({"messages": [HumanMessage(content=user_query)]}, config=config)
-    print("Got result, final message:")
-    print(extract_text(result["messages"][-1].content))
+
+    if "__interrupt__" in result:
+        print("Graph paused. Itinerary so far:")
+        print(result["__interrupt__"][0].value["itinerary"])
+        print("\nResuming with: decline email...")
+        final_result = agent.graph.invoke(Command(resume={"send_email": False}), config=config)
+        print(extract_text(final_result["messages"][-1].content))
+    else:
+        print(extract_text(result["messages"][-1].content))

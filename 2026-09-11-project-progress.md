@@ -32,9 +32,9 @@ Rebuilt from scratch (not the original uploaded scaffold). Stack: Python 3.13, c
 
 **Stage 9 — Error handling (done).** Added `retry_on_failure` (retry decorator, 3 attempts, increasing delay) in `agents/utils.py`, applied to both LLM calls (`itinerary_planner.py`'s `_call_llm`, `agent.py`'s `_invoke_llm`). Added `try/except requests.exceptions.RequestException` around all 3 `requests.get()` calls (flights, hotel destination lookup, hotel search) so network failures return a clean error dict instead of crashing the whole graph. Fixed `app.py` bug where email failures showed a green success box — now branches on message content.
 
-## Not started yet
+**Stage 10 — Tests (done).** `tests/` folder, 13 `pytest` tests across 4 files, all mocked (no real API calls, no quota burned). Covers: flights round-trip vs one-way endpoint selection, non-200 responses, network errors; hotel destination resolution success/no-match, error propagation, network errors; itinerary planner success and repeated-failure handling; `retry_on_failure` and `extract_text` utils directly. Run via `python -m pytest` (not bare `pytest` — same import-path reasoning as `python -m agents.agent`). All 13 passing.
 
-- **Stage 10 — Tests.** `pytest`, mocked API responses for the three tool files.
+## Not started yet `pytest`, mocked API responses for the three tool files.
 - **Stage 11 — README.** Real setup instructions, architecture diagram/explanation, design-decision notes (interview talking points: why RapidAPI, why Gemini over OpenAI, why LangGraph over a plain loop, the response-shape normalization lesson, why timeouts matter).
 - **Stage 12 — Run end-to-end, optional deploy** to Streamlit Community Cloud.
 

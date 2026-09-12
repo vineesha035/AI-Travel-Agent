@@ -5,3 +5,4 @@ langchain-core
 langgraph
 streamlit
 sendgrid
+pytest

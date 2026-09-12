@@ -30,10 +30,10 @@ Rebuilt from scratch (not the original uploaded scaffold). Stack: Python 3.13, c
 - **Verified fully working end-to-end through the browser**: decline path resumes silently, send path actually delivers a real email via SendGrid (landed in spam initially — expected/normal for a fresh sender without full domain authentication, not a bug).
 - Known cosmetic bug to fix in Stage 9: `render_email_decision` shows `st.success()` (green box) even when the email actually fails to send — should branch on whether the note says "sent" vs "failed."
 
+**Stage 9 — Error handling (done).** Added `retry_on_failure` (retry decorator, 3 attempts, increasing delay) in `agents/utils.py`, applied to both LLM calls (`itinerary_planner.py`'s `_call_llm`, `agent.py`'s `_invoke_llm`). Added `try/except requests.exceptions.RequestException` around all 3 `requests.get()` calls (flights, hotel destination lookup, hotel search) so network failures return a clean error dict instead of crashing the whole graph. Fixed `app.py` bug where email failures showed a green success box — now branches on message content.
+
 ## Not started yet
 
-- **Finish Stage 8:** once `agent.py`'s interrupt/resume works standalone, update `app.py` to: detect `"__interrupt__" in result`, show the itinerary from the interrupt payload, render the email opt-in form, and on submit call `graph.invoke(Command(resume=...), config=...)` with the *same* `thread_id` stored in `st.session_state`.
-- **Stage 9 — Error handling.** Wrap LLM/API calls with retry logic (justified by the repeated transient 503s and one connection-reset error hit this session). Handle missing/invalid keys gracefully instead of raw tracebacks.
 - **Stage 10 — Tests.** `pytest`, mocked API responses for the three tool files.
 - **Stage 11 — README.** Real setup instructions, architecture diagram/explanation, design-decision notes (interview talking points: why RapidAPI, why Gemini over OpenAI, why LangGraph over a plain loop, the response-shape normalization lesson, why timeouts matter).
 - **Stage 12 — Run end-to-end, optional deploy** to Streamlit Community Cloud.

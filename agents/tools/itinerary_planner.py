@@ -4,7 +4,12 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import SystemMessage, HumanMessage
 from agents.utils import extract_text
 load_dotenv()
+from agents.utils import extract_text, retry_on_failure
 
+
+@retry_on_failure(max_attempts=3, delay=2)
+def _call_llm(llm, messages):
+    return llm.invoke(messages)
 ITINERARY_SYSTEM_PROMPT = """
 You are a travel itinerary planner.
 Given flight options, hotel options, user interests, and trip dates,
@@ -47,7 +52,11 @@ Hotels: {hotels}
 """),
     ]
 
-    response = llm.invoke(messages)
+    try:
+        response = _call_llm(llm, messages)
+    except Exception as e:
+        return {"itinerary": f"Could not generate itinerary after multiple attempts: {e}"}
+
     return {"itinerary": extract_text(response.content)}
 
 

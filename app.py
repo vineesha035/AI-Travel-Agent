@@ -79,7 +79,11 @@ def render_email_decision():
                 }
                 with st.spinner("Sending email..."):
                     final_result = st.session_state.agent.graph.invoke(Command(resume=resume_value), config=config)
-                st.success(extract_text(final_result["messages"][-1].content))
+                    message = extract_text(final_result["messages"][-1].content)
+                if "sent successfully" in message.lower():
+                    st.success(message)
+                else:
+                    st.error(message)
                 st.session_state.awaiting_email_decision = False
             else:
                 st.error("Please fill out all email fields.")

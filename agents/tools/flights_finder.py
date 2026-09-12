@@ -35,7 +35,10 @@ def flights_finder(origin: str, destination: str, date: str, return_date: str = 
     else:
         endpoint = f"{BASE_URL}/search"
 
-    response = requests.get(endpoint, headers=HEADERS, params=params, timeout=15)
+    try:
+        response = requests.get(endpoint, headers=HEADERS, params=params, timeout=15)
+    except requests.exceptions.RequestException as e:
+        return {"error": f"Network error calling flights API: {e}"}
 
     if response.status_code != 200:
         return {"error": f"Failed to fetch flights: {response.status_code} - {response.text}"}

@@ -13,8 +13,7 @@ from agents.tools.email_sender import send_email
 from agents.tools.flights_finder import flights_finder
 from agents.tools.hotel_finder import hotels_finder
 from agents.tools.itinerary_planner import itinerary_planner
-from agents.utils import extract_text
-
+from agents.utils import extract_text, retry_on_failure
 load_dotenv()
 
 
@@ -32,6 +31,10 @@ You can:
 - Use itinerary_planner to generate a daily itinerary
 Always combine tool outputs into a clear, well-organized trip summary for the user.
 """
+@retry_on_failure(max_attempts=3, delay=2)
+def _invoke_llm(llm, messages):
+    return llm.invoke(messages)
+
 
 
 class Agent:
@@ -68,7 +71,10 @@ class Agent:
 
     def call_tools_llm(self, state: AgentState):
         messages = [SystemMessage(content=TOOLS_SYSTEM_PROMPT)] + state["messages"]
-        message = self._tools_llm.invoke(messages)
+        try:
+            message = _invoke_llm(self._tools_llm, messages)
+        except Exception as e:
+            message = AIMessage(content=f"I hit a repeated error calling the AI model: {e}")
         return {"messages": [message]}
 
     def invoke_tools(self, state: AgentState):

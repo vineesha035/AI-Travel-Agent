@@ -36,9 +36,11 @@ Rebuilt from scratch (not the original uploaded scaffold). Stack: Python 3.13, c
 
 **Stage 11 — README (done).** Full `README.md` at project root: features, architecture diagram, tech stack, setup steps, test-running instructions, design-decision talking points, known limitations, project structure.
 
-## Not started yet
+**Stage 12 — Final verification + deployment (done).** Verified full end-to-end flow locally and in production with multiple fresh queries (Paris, Tokyo, Barcelona) — real flights, real hotels, generated itinerary, both email decline and send paths. Deployed to Streamlit Community Cloud at **https://ai-travel-agent-kz93ftenhqqxtmu3iwxnwu.streamlit.app**, secrets configured via Streamlit Cloud's Secrets manager (TOML format, root-level keys — these are also exposed via `os.environ`, so no code changes were needed versus local `.env`).
 
-- **Stage 12 — Run end-to-end, optional deploy** to Streamlit Community Cloud.
+## Project status: COMPLETE
+
+All 12 stages done. Working local app, working deployed app, pushed GitHub repo, README, tests, error handling.
 
 ## Common bugs hit this session (so you recognize them fast)
 

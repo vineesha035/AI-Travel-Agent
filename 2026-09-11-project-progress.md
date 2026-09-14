@@ -22,7 +22,7 @@ Rebuilt from scratch (not the original uploaded scaffold). Stack: Python 3.13, c
 
 **Stage 7 — `app.py`.** Streamlit UI. Key concept: Streamlit reruns the *entire script* on every interaction, so anything that must survive a rerun (the `Agent` instance, `thread_id`) lives in `st.session_state`, guarded by `if "x" not in st.session_state`. Verified working end-to-end through the actual browser: real flights, real hotel, full itinerary.
 
-**Stage 8 — SendGrid email + LangGraph interrupt (in progress).**
+**Stage 8 — SendGrid email + LangGraph interrupt (done).**
 - `agents/tools/email_sender.py` — plain function using `SendGridAPIClient`/`Mail` to send the itinerary as HTML email. Not LLM-callable; we decide when to call it, not the model.
 - `agent.py` updated: new node `request_email_decision` runs after the LLM is done calling tools (instead of going straight to `END`). It calls `interrupt({"itinerary": itinerary_text})`, which pauses the entire graph and hands that payload back to the caller. Resuming later with `graph.invoke(Command(resume={...}), config=...)` (same `thread_id`) continues execution from that exact point — either sends the email or skips it, then reaches `END`.
 - Confirmed working standalone: `python -m agents.agent` pauses correctly, prints the itinerary from the interrupt payload, resumes with `Command(resume=...)`, and reaches `END`.
@@ -34,8 +34,10 @@ Rebuilt from scratch (not the original uploaded scaffold). Stack: Python 3.13, c
 
 **Stage 10 — Tests (done).** `tests/` folder, 13 `pytest` tests across 4 files, all mocked (no real API calls, no quota burned). Covers: flights round-trip vs one-way endpoint selection, non-200 responses, network errors; hotel destination resolution success/no-match, error propagation, network errors; itinerary planner success and repeated-failure handling; `retry_on_failure` and `extract_text` utils directly. Run via `python -m pytest` (not bare `pytest` — same import-path reasoning as `python -m agents.agent`). All 13 passing.
 
-## Not started yet `pytest`, mocked API responses for the three tool files.
-- **Stage 11 — README.** Real setup instructions, architecture diagram/explanation, design-decision notes (interview talking points: why RapidAPI, why Gemini over OpenAI, why LangGraph over a plain loop, the response-shape normalization lesson, why timeouts matter).
+**Stage 11 — README (done).** Full `README.md` at project root: features, architecture diagram, tech stack, setup steps, test-running instructions, design-decision talking points, known limitations, project structure.
+
+## Not started yet
+
 - **Stage 12 — Run end-to-end, optional deploy** to Streamlit Community Cloud.
 
 ## Common bugs hit this session (so you recognize them fast)
